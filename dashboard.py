@@ -4,17 +4,41 @@ import plotly.express as px
 
 st.set_page_config(page_title="Дашборд продаж", layout="wide", page_icon="📊")
 
-FILE = "analytics_report_2026-11-10_18_08.xlsx"
+DEFAULT_FILE = "analytics_report_2026-11-10_18_08.xlsx"
+
+# =========================================================
+# Боковая панель с загрузкой файла
+# =========================================================
+st.sidebar.header("📁 Загрузка данных")
+uploaded_file = st.sidebar.file_uploader("Загрузите Excel-файл отчета (Sheet1)", type=["xlsx"])
+
+if uploaded_file is not None:
+    st.sidebar.success("✅ Файл успешно загружен!")
+    data_source = uploaded_file
+else:
+    st.sidebar.info("Используется файл по умолчанию. Загрузите свой файл, чтобы обновить данные.")
+    data_source = DEFAULT_FILE
 
 @st.cache_data
-def load_data(path):
-    df = pd.read_excel(path, sheet_name="Sheet1", skiprows=4)
+def load_data(source):
+    try:
+        if isinstance(source, str):
+            df = pd.read_excel(source, sheet_name="Sheet1", skiprows=4)
+        else:
+            df = pd.read_excel(source, sheet_name="Sheet1", skiprows=4)
+    except Exception as e:
+        st.error(f"Ошибка при чтении файла: {e}")
+        st.stop()
+
+    # Очистка данных
     df = df[df["Название товара"].notna()]
     df = df[df["Название товара"] != "Среднее значение по товарам"]
     
     df = df.rename(columns={
         "Название товара": "Товар",
         "Ссылка на товар": "Ссылка",
+        "Продавец": "Продавец",
+        "Бренд": "Бренд",
         "Категория 3 уровня": "Категория",
         "Заказано на сумму, ₽": "Сумма_заказов",
         "Заказано, штуки": "Кол_во",
@@ -24,17 +48,19 @@ def load_data(path):
         "Конверсия из показа в заказ, %": "Конверсия"
     })
     
+    # Заполняем пустые значения
     df["Бренд"] = (df["Бренд"].fillna("Без бренда").replace("", "Без бренда").replace("без бренда", "Без бренда"))
+    df["Продавец"] = df["Продавец"].fillna("Неизвестный продавец")
     
     for col in ["Сумма_заказов", "Кол_во", "Средняя_цена", "Мин_цена"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     for col in ["Доля_выкупа", "Конверсия"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(float)
         
-    cols = ["Товар", "Ссылка", "Бренд", "Категория", "Сумма_заказов", "Кол_во", "Средняя_цена", "Мин_цена", "Доля_выкупа", "Конверсия"]
+    cols = ["Товар", "Ссылка", "Продавец", "Бренд", "Категория", "Сумма_заказов", "Кол_во", "Средняя_цена", "Мин_цена", "Доля_выкупа", "Конверсия"]
     return df[cols].sort_values("Сумма_заказов", ascending=False).reset_index(drop=True)
 
-df = load_data(FILE)
+df = load_data(data_source)
 
 # =========================================================
 # KPI
@@ -42,46 +68,46 @@ df = load_data(FILE)
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Общая сумма продаж", f"{df['Сумма_заказов'].sum():,.0f} ₽".replace(",", " "))
 c2.metric("Товаров", f"{len(df):,}".replace(",", " "))
-c3.metric("Брендов", df["Бренд"].nunique())
+c3.metric("Продавцов", df["Продавец"].nunique())
 c4.metric("Средняя цена", f"{df['Средняя_цена'].mean():,.0f} ₽".replace(",", " "))
 
 # =========================================================
-# Агрегация и переключатели
+# Агрегация по продавцам и переключатели
 # =========================================================
-brands_agg = (df.groupby("Бренд", as_index=False)["Сумма_заказов"].sum()
-              .sort_values("Сумма_заказов", ascending=False).reset_index(drop=True))
-brands_agg["Рейтинг"] = brands_agg.index + 1
+sellers_agg = (df.groupby("Продавец", as_index=False)["Сумма_заказов"].sum()
+               .sort_values("Сумма_заказов", ascending=False).reset_index(drop=True))
+sellers_agg["Рейтинг"] = sellers_agg.index + 1
 
-st.subheader("🏆 Бренды по сумме продаж")
-col_b, col_p = st.columns(2)
+st.subheader("🏆 Продавцы по сумме продаж")
+col_s, col_p = st.columns(2)
 
-with col_b:
-    st.caption("**Сколько брендов показать:**")
-    brand_limit = st.radio("Бренды", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="brand_limit")
+with col_s:
+    st.caption("**Сколько продавцов показать:**")
+    seller_limit = st.radio("Продавцы", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="seller_limit")
 
 with col_p:
-    st.caption("**Сколько товаров внутри каждого бренда:**")
+    st.caption("**Сколько товаров внутри каждого продавца:**")
     product_limit = st.radio("Товары", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="product_limit")
 
-brand_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(brands_agg)}
+seller_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(sellers_agg)}
 product_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": None}
 
-n_brands = brand_limit_map[brand_limit]
+n_sellers = seller_limit_map[seller_limit]
 n_products = product_limit_map[product_limit]
-shown_brands = brands_agg.head(n_brands).reset_index(drop=True)
+shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
 # =========================================================
-# График
+# График по продавцам
 # =========================================================
-chart_height = max(500, len(shown_brands) * 26)
+chart_height = max(500, len(shown_sellers) * 26)
 fig = px.bar(
-    shown_brands, x="Сумма_заказов", y="Бренд", orientation="h", text="Сумма_заказов",
+    shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
     color="Сумма_заказов", color_continuous_scale="Purples",
 )
 fig.update_traces(texttemplate="%{text:,.0f} ₽".replace(",", " "), textposition="outside")
 fig.update_layout(
-    title=f"{brand_limit} брендов по сумме продаж",
-    yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_brands) <= 30 else 9}},
+    title=f"{seller_limit} продавцов по сумме продаж",
+    yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
     xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height, coloraxis_showscale=False,
     margin=dict(l=10, r=90, t=50, b=10),
 )
@@ -96,6 +122,8 @@ def render_html_table(data):
     
     headers = {
         "Товар": "Название товара",
+        "Продавец": "Продавец",
+        "Бренд": "Бренд",
         "Категория": "Категория",
         "Сумма_заказов": "Заказано на сумму, ₽",
         "Кол_во": "Заказано, шт",
@@ -122,7 +150,6 @@ def render_html_table(data):
             elif col == "Доля_выкупа":
                 html += f'<td style="padding: 10px; text-align: right;">{val:.1f}%</td>'
             elif col == "Конверсия":
-                # ИСПРАВЛЕНИЕ: два знака после запятой для конверсии
                 html += f'<td style="padding: 10px; text-align: right;">{val:.2f}%</td>'
             else:
                 html += f'<td style="padding: 10px;">{val}</td>'
@@ -131,19 +158,19 @@ def render_html_table(data):
     return html
 
 # =========================================================
-# Таблицы товаров по брендам
+# Таблицы товаров по продавцам
 # =========================================================
-st.subheader("🏷️ Бренды и товары")
-st.caption(f"Бренды: **{brand_limit}** • Товары в каждом бренде: **{product_limit}** • сортировка по сумме заказов ↓")
+st.subheader("🏷️ Продавцы и товары")
+st.caption(f"Продавцы: **{seller_limit}** • Товары в каждом: **{product_limit}** • сортировка по сумме заказов ↓")
 
-for _, brand_row in shown_brands.iterrows():
-    brand = brand_row["Бренд"]
-    items = df[df["Бренд"] == brand].sort_values("Сумма_заказов", ascending=False)
+for _, seller_row in shown_sellers.iterrows():
+    seller = seller_row["Продавец"]
+    items = df[df["Продавец"] == seller].sort_values("Сумма_заказов", ascending=False)
     total_items = len(items)
     items_shown = items.head(n_products) if n_products else items
 
     suffix = f" • показано {len(items_shown)} из {total_items}" if (n_products and total_items > n_products) else ""
-    header = f"#{brand_row['Рейтинг']} **{brand}** — {brand_row['Сумма_заказов']:,.0f} ₽ • {total_items} тов.{suffix}".replace(",", " ")
+    header = f"#{seller_row['Рейтинг']} **{seller}** — {seller_row['Сумма_заказов']:,.0f} ₽ • {total_items} тов.{suffix}".replace(",", " ")
     
     with st.expander(header):
         html_table = render_html_table(items_shown)
