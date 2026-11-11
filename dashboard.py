@@ -90,7 +90,6 @@ selected_sellers = st.sidebar.multiselect(
     help="Начните вводить название для быстрого поиска"
 )
 
-# Применяем фильтры (этот df используется везде дальше)
 df = df_full[
     (df_full["Бренд"].isin(selected_brands)) & 
     (df_full["Продавец"].isin(selected_sellers))
@@ -110,7 +109,7 @@ c3.metric("Продавцов", df["Продавец"].nunique())
 c4.metric("Средняя цена", f"{df['Средняя_цена'].mean():,.0f} ₽".replace(",", " "))
 
 # =========================================================
-# Функция для рендера HTML-таблицы (используется дважды)
+# Функция для рендера HTML-таблицы
 # =========================================================
 def render_html_table(data):
     html = '<table style="width:100%; border-collapse: collapse; font-size: 14px; font-family: sans-serif;">'
@@ -167,23 +166,24 @@ with col_tp:
 pt_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(df)}
 n_top_products = pt_limit_map[product_top_limit]
 
-# Отбираем топ товаров
-top_products_df = df.head(n_top_products).copy()
+top_products_df = df.head(n_top_products).copy().reset_index(drop=True)
 
-# Обрезаем названия для графика, чтобы они влезли
-top_products_df['Короткое_название'] = top_products_df['Товар'].apply(lambda x: x[:45] + '...' if len(x) > 45 else x)
+# Уникальное название для оси Y (добавляем номер), чтобы график не склеивал товары
+top_products_df['Label'] = top_products_df.apply(
+    lambda row: f"{row.name + 1}. {row['Товар'][:40]}..." if len(row['Товар']) > 40 else f"{row.name + 1}. {row['Товар']}", 
+    axis=1
+)
 
-# График по товарам
-chart_height_products = max(500, len(top_products_df) * 30) # Чуть больше высоты для названий
+chart_height_products = max(500, len(top_products_df) * 30)
 fig_products = px.bar(
-    top_products_df, x="Сумма_заказов", y="Короткое_название", orientation="h", text="Сумма_заказов",
-    color="Сумма_заказов", color_continuous_scale="Blues",
+    top_products_df, x="Сумма_заказов", y="Label", orientation="h", text="Сумма_заказов"
 )
 fig_products.update_traces(
+    marker_color='#4a90e2', # Единый синий цвет
     texttemplate="%{text:,.0f} ₽".replace(",", " "), 
     textposition="inside", 
     insidetextanchor="middle",
-    textfont=dict(color="black") # Черный текст на голубом фоне
+    textfont=dict(color="white")
 )
 fig_products.update_layout(
     title=f"{product_top_limit} товаров по сумме продаж",
@@ -193,7 +193,6 @@ fig_products.update_layout(
 )
 st.plotly_chart(fig_products, width='stretch')
 
-# Подборка (таблица) топ товаров
 with st.expander(f"📋 Подборка: {product_top_limit} товаров (детали)"):
     st.markdown(render_html_table(top_products_df), unsafe_allow_html=True)
 
@@ -225,7 +224,6 @@ n_sellers = seller_limit_map[seller_limit]
 n_products = product_limit_map[product_limit]
 shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
-# График по продавцам
 chart_height_sellers = max(500, len(shown_sellers) * 26)
 fig_sellers = px.bar(
     shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
