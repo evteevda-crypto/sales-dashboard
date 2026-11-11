@@ -7,7 +7,7 @@ st.set_page_config(page_title="Дашборд продаж", layout="wide", page
 DEFAULT_FILE = "analytics_report_2026-11-10_18_08.xlsx"
 
 # =========================================================
-# Боковая панель с загрузкой файла
+# Боковая панель
 # =========================================================
 st.sidebar.header("📁 Загрузка данных")
 uploaded_file = st.sidebar.file_uploader("Загрузите Excel-файл отчета (Sheet1)", type=["xlsx"])
@@ -16,7 +16,7 @@ if uploaded_file is not None:
     st.sidebar.success("✅ Файл успешно загружен!")
     data_source = uploaded_file
 else:
-    st.sidebar.info("Используется файл по умолчанию. Загрузите свой файл, чтобы обновить данные.")
+    st.sidebar.info("Используется файл по умолчанию.")
     data_source = DEFAULT_FILE
 
 @st.cache_data
@@ -48,7 +48,6 @@ def load_data(source):
         "Конверсия из показа в заказ, %": "Конверсия"
     })
     
-    # Заполняем пустые значения
     df["Бренд"] = (df["Бренд"].fillna("Без бренда").replace("", "Без бренда").replace("без бренда", "Без бренда"))
     df["Продавец"] = df["Продавец"].fillna("Неизвестный продавец")
     
@@ -60,10 +59,46 @@ def load_data(source):
     cols = ["Товар", "Ссылка", "Продавец", "Бренд", "Категория", "Сумма_заказов", "Кол_во", "Средняя_цена", "Мин_цена", "Доля_выкупа", "Конверсия"]
     return df[cols].sort_values("Сумма_заказов", ascending=False).reset_index(drop=True)
 
-df = load_data(data_source)
+df_full = load_data(data_source)
 
 # =========================================================
-# KPI
+# Боковая панель: ФИЛЬТРЫ
+# =========================================================
+st.sidebar.divider()
+st.sidebar.header("🔍 Фильтры")
+
+# Списки уникальных значений для фильтров
+all_brands = sorted(df_full["Бренд"].unique())
+all_sellers = sorted(df_full["Продавец"].unique())
+
+# Множественный выбор (по умолчанию выбраны все)
+selected_brands = st.sidebar.multiselect(
+    "Выберите бренды:",
+    options=all_brands,
+    default=all_brands,
+    help="Начните вводить название для быстрого поиска"
+)
+
+selected_sellers = st.sidebar.multiselect(
+    "Выберите продавцов:",
+    options=all_sellers,
+    default=all_sellers,
+    help="Начните вводить название для быстрого поиска"
+)
+
+# Применяем фильтры к данным
+df = df_full[
+    (df_full["Бренд"].isin(selected_brands)) & 
+    (df_full["Продавец"].isin(selected_sellers))
+]
+
+# Если после фильтрации ничего не осталось — останавливаем вывод
+if df.empty:
+    st.warning("⚠️ По выбранным фильтрам нет данных. Пожалуйста, выберите другие бренды или продавцов.")
+    st.stop()
+
+# =========================================================
+# KPI (пересчитываются по отфильтрованным данным)
 # =========================================================
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Общая сумма продаж", f"{df['Сумма_заказов'].sum():,.0f} ₽".replace(",", " "))
@@ -72,7 +107,7 @@ c3.metric("Продавцов", df["Продавец"].nunique())
 c4.metric("Средняя цена", f"{df['Средняя_цена'].mean():,.0f} ₽".replace(",", " "))
 
 # =========================================================
-# Агрегация по продавцам и переключатели
+# Агрегация по продавцам
 # =========================================================
 sellers_agg = (df.groupby("Продавец", as_index=False)["Сумма_заказов"].sum()
                .sort_values("Сумма_заказов", ascending=False).reset_index(drop=True))
@@ -97,7 +132,7 @@ n_products = product_limit_map[product_limit]
 shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
 # =========================================================
-# График по продавцам
+# График
 # =========================================================
 chart_height = max(500, len(shown_sellers) * 26)
 fig = px.bar(
