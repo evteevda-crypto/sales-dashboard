@@ -15,7 +15,6 @@ uploaded_file = st.sidebar.file_uploader("Загрузите Excel-файл от
 if uploaded_file is not None:
     st.sidebar.success("✅ Файл успешно загружен!")
     data_source = uploaded_file
-    # Уникальный ключ на основе имени загруженного файла
     file_key = uploaded_file.name 
 else:
     st.sidebar.info("Используется файл по умолчанию.")
@@ -72,12 +71,9 @@ df_full = load_data(data_source)
 st.sidebar.divider()
 st.sidebar.header("🔍 Фильтры")
 
-# Списки уникальных значений для фильтров
 all_brands = sorted(df_full["Бренд"].unique())
 all_sellers = sorted(df_full["Продавец"].unique())
 
-# Множественный выбор. Параметр key=f"..._{file_key}" гарантирует, что при 
-# загрузке нового файла фильтры сбросятся и не выдадут ошибку, если старых брендов больше нет.
 selected_brands = st.sidebar.multiselect(
     "Выберите бренды:",
     options=all_brands,
@@ -94,19 +90,17 @@ selected_sellers = st.sidebar.multiselect(
     help="Начните вводить название для быстрого поиска"
 )
 
-# Применяем фильтры к данным
 df = df_full[
     (df_full["Бренд"].isin(selected_brands)) & 
     (df_full["Продавец"].isin(selected_sellers))
 ]
 
-# Если после фильтрации ничего не осталось — останавливаем вывод
 if df.empty:
     st.warning("⚠️ По выбранным фильтрам нет данных. Пожалуйста, выберите другие бренды или продавцов.")
     st.stop()
 
 # =========================================================
-# KPI (пересчитываются по отфильтрованным данным)
+# KPI
 # =========================================================
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Общая сумма продаж", f"{df['Сумма_заказов'].sum():,.0f} ₽".replace(",", " "))
@@ -140,19 +134,25 @@ n_products = product_limit_map[product_limit]
 shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
 # =========================================================
-# График по продавцам
+# График (ИЗМЕНЕНО: цифры внутри столбцов)
 # =========================================================
 chart_height = max(500, len(shown_sellers) * 26)
 fig = px.bar(
     shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
     color="Сумма_заказов", color_continuous_scale="Purples",
 )
-fig.update_traces(texttemplate="%{text:,.0f} ₽".replace(",", " "), textposition="outside")
+# Здесь меняем положение и цвет текста
+fig.update_traces(
+    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
+    textposition="inside",          # <--- Текст внутри
+    insidetextanchor="middle",      # <--- Выравнивание по центру столбца
+    textfont=dict(color="white")    # <--- Белый цвет для читаемости
+)
 fig.update_layout(
     title=f"{seller_limit} продавцов по сумме продаж",
     yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
     xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height, coloraxis_showscale=False,
-    margin=dict(l=10, r=90, t=50, b=10),
+    margin=dict(l=10, r=20, t=50, b=10), # Уменьшил отступ справа (r=20), так как текст больше не вылезает наружу
 )
 st.plotly_chart(fig, width='stretch')
 
