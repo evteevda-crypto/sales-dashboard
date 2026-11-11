@@ -173,22 +173,24 @@ top_products_df['Label'] = top_products_df.apply(
     axis=1
 )
 
+# Предварительно форматируем текст с пробелами для графика
+top_products_df['Сумма_текст'] = top_products_df['Сумма_заказов'].apply(lambda x: f"{x:,.0f}".replace(",", " ") + " ₽")
+
 chart_height_products = max(500, len(top_products_df) * 30)
 fig_products = px.bar(
-    top_products_df, x="Сумма_заказов", y="Label", orientation="h", text="Сумма_заказов"
+    top_products_df, x="Сумма_заказов", y="Label", orientation="h", text="Сумма_текст"
 )
 fig_products.update_traces(
-    marker_color='#4a90e2',
-    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
-    textposition="auto", # <--- АВТОМАТИЧЕСКОЕ ПОЗИЦИОНИРОВАНИЕ
+    marker_color='#4a90e2', # Единый синий цвет
+    texttemplate="%{text}", # Берем уже готовый текст
+    textposition="auto", 
     insidetextanchor="middle"
-    # Убрали принудительный белый цвет, чтобы текст снаружи был виден
 )
 fig_products.update_layout(
     title=f"{product_top_limit} товаров по сумме продаж",
     yaxis={"categoryorder": "total ascending", "tickfont": {"size": 10}},
     xaxis={"tickfont": {"size": 10}}, showlegend=False, height=chart_height_products, 
-    coloraxis_showscale=False, margin=dict(l=10, r=100, t=50, b=10), # r=100, чтобы текст снаружи не обрезался
+    coloraxis_showscale=False, margin=dict(l=10, r=120, t=50, b=10), # r=120 для запаса под текст снаружи
 )
 st.plotly_chart(fig_products, width='stretch')
 
@@ -223,22 +225,25 @@ n_sellers = seller_limit_map[seller_limit]
 n_products = product_limit_map[product_limit]
 shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
+# Предварительно форматируем текст с пробелами для графика
+shown_sellers['Сумма_текст'] = shown_sellers['Сумма_заказов'].apply(lambda x: f"{x:,.0f}".replace(",", " ") + " ₽")
+
 chart_height_sellers = max(500, len(shown_sellers) * 26)
 fig_sellers = px.bar(
-    shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
-    color="Сумма_заказов", color_continuous_scale="Purples",
+    shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_текст"
+    # Убрали color="Сумма_заказов", чтобы не было градиента
 )
 fig_sellers.update_traces(
-    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
-    textposition="auto", # <--- АВТОМАТИЧЕСКОЕ ПОЗИЦИОНИРОВАНИЕ
+    marker_color='#8e44ad', # Единый фиолетовый цвет
+    texttemplate="%{text}", 
+    textposition="auto", 
     insidetextanchor="middle"
-    # Убрали принудительный белый цвет
 )
 fig_sellers.update_layout(
     title=f"{seller_limit} продавцов по сумме продаж",
     yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
     xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height_sellers, coloraxis_showscale=False,
-    margin=dict(l=10, r=100, t=50, b=10), # r=100 для запаса места под внешний текст
+    margin=dict(l=10, r=120, t=50, b=10),
 )
 st.plotly_chart(fig_sellers, width='stretch')
 
