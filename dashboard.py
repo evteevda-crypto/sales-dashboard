@@ -7,7 +7,7 @@ st.set_page_config(page_title="Дашборд продаж", layout="wide", page
 DEFAULT_FILE = "analytics_report_2026-11-10_18_08.xlsx"
 
 # =========================================================
-# Боковая панель
+# Боковая панель: ЗАГРУЗКА ДАННЫХ
 # =========================================================
 st.sidebar.header("📁 Загрузка данных")
 uploaded_file = st.sidebar.file_uploader("Загрузите Excel-файл отчета (Sheet1)", type=["xlsx"])
@@ -15,9 +15,12 @@ uploaded_file = st.sidebar.file_uploader("Загрузите Excel-файл от
 if uploaded_file is not None:
     st.sidebar.success("✅ Файл успешно загружен!")
     data_source = uploaded_file
+    # Уникальный ключ на основе имени загруженного файла
+    file_key = uploaded_file.name 
 else:
     st.sidebar.info("Используется файл по умолчанию.")
     data_source = DEFAULT_FILE
+    file_key = "default_file"
 
 @st.cache_data
 def load_data(source):
@@ -48,9 +51,11 @@ def load_data(source):
         "Конверсия из показа в заказ, %": "Конверсия"
     })
     
+    # Заполняем пустые значения
     df["Бренд"] = (df["Бренд"].fillna("Без бренда").replace("", "Без бренда").replace("без бренда", "Без бренда"))
     df["Продавец"] = df["Продавец"].fillna("Неизвестный продавец")
     
+    # Приводим типы данных
     for col in ["Сумма_заказов", "Кол_во", "Средняя_цена", "Мин_цена"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     for col in ["Доля_выкупа", "Конверсия"]:
@@ -71,11 +76,13 @@ st.sidebar.header("🔍 Фильтры")
 all_brands = sorted(df_full["Бренд"].unique())
 all_sellers = sorted(df_full["Продавец"].unique())
 
-# Множественный выбор (по умолчанию выбраны все)
+# Множественный выбор. Параметр key=f"..._{file_key}" гарантирует, что при 
+# загрузке нового файла фильтры сбросятся и не выдадут ошибку, если старых брендов больше нет.
 selected_brands = st.sidebar.multiselect(
     "Выберите бренды:",
     options=all_brands,
     default=all_brands,
+    key=f"brands_{file_key}",
     help="Начните вводить название для быстрого поиска"
 )
 
@@ -83,6 +90,7 @@ selected_sellers = st.sidebar.multiselect(
     "Выберите продавцов:",
     options=all_sellers,
     default=all_sellers,
+    key=f"sellers_{file_key}",
     help="Начните вводить название для быстрого поиска"
 )
 
@@ -132,7 +140,7 @@ n_products = product_limit_map[product_limit]
 shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
 
 # =========================================================
-# График
+# График по продавцам
 # =========================================================
 chart_height = max(500, len(shown_sellers) * 26)
 fig = px.bar(
