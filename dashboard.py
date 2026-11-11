@@ -90,6 +90,7 @@ selected_sellers = st.sidebar.multiselect(
     help="Начните вводить название для быстрого поиска"
 )
 
+# Применяем фильтры (этот df используется везде дальше)
 df = df_full[
     (df_full["Бренд"].isin(selected_brands)) & 
     (df_full["Продавец"].isin(selected_sellers))
@@ -109,55 +110,7 @@ c3.metric("Продавцов", df["Продавец"].nunique())
 c4.metric("Средняя цена", f"{df['Средняя_цена'].mean():,.0f} ₽".replace(",", " "))
 
 # =========================================================
-# Агрегация по продавцам
-# =========================================================
-sellers_agg = (df.groupby("Продавец", as_index=False)["Сумма_заказов"].sum()
-               .sort_values("Сумма_заказов", ascending=False).reset_index(drop=True))
-sellers_agg["Рейтинг"] = sellers_agg.index + 1
-
-st.subheader("🏆 Продавцы по сумме продаж")
-col_s, col_p = st.columns(2)
-
-with col_s:
-    st.caption("**Сколько продавцов показать:**")
-    seller_limit = st.radio("Продавцы", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="seller_limit")
-
-with col_p:
-    st.caption("**Сколько товаров внутри каждого продавца:**")
-    product_limit = st.radio("Товары", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="product_limit")
-
-seller_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(sellers_agg)}
-product_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": None}
-
-n_sellers = seller_limit_map[seller_limit]
-n_products = product_limit_map[product_limit]
-shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
-
-# =========================================================
-# График (ИЗМЕНЕНО: цифры внутри столбцов)
-# =========================================================
-chart_height = max(500, len(shown_sellers) * 26)
-fig = px.bar(
-    shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
-    color="Сумма_заказов", color_continuous_scale="Purples",
-)
-# Здесь меняем положение и цвет текста
-fig.update_traces(
-    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
-    textposition="inside",          # <--- Текст внутри
-    insidetextanchor="middle",      # <--- Выравнивание по центру столбца
-    textfont=dict(color="white")    # <--- Белый цвет для читаемости
-)
-fig.update_layout(
-    title=f"{seller_limit} продавцов по сумме продаж",
-    yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
-    xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height, coloraxis_showscale=False,
-    margin=dict(l=10, r=20, t=50, b=10), # Уменьшил отступ справа (r=20), так как текст больше не вылезает наружу
-)
-st.plotly_chart(fig, width='stretch')
-
-# =========================================================
-# Функция для рендера HTML-таблицы
+# Функция для рендера HTML-таблицы (используется дважды)
 # =========================================================
 def render_html_table(data):
     html = '<table style="width:100%; border-collapse: collapse; font-size: 14px; font-family: sans-serif;">'
@@ -201,9 +154,97 @@ def render_html_table(data):
     return html
 
 # =========================================================
-# Таблицы товаров по продавцам
+# БЛОК 1: ТОП ТОВАРОВ
 # =========================================================
-st.subheader("🏷️ Продавцы и товары")
+st.divider()
+st.subheader("🔥 Топ товаров по сумме продаж")
+
+col_tp, _ = st.columns([1, 2])
+with col_tp:
+    st.caption("**Сколько товаров показать:**")
+    product_top_limit = st.radio("Топ товаров", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=0, horizontal=True, label_visibility="collapsed", key="product_top_limit")
+
+pt_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(df)}
+n_top_products = pt_limit_map[product_top_limit]
+
+# Отбираем топ товаров
+top_products_df = df.head(n_top_products).copy()
+
+# Обрезаем названия для графика, чтобы они влезли
+top_products_df['Короткое_название'] = top_products_df['Товар'].apply(lambda x: x[:45] + '...' if len(x) > 45 else x)
+
+# График по товарам
+chart_height_products = max(500, len(top_products_df) * 30) # Чуть больше высоты для названий
+fig_products = px.bar(
+    top_products_df, x="Сумма_заказов", y="Короткое_название", orientation="h", text="Сумма_заказов",
+    color="Сумма_заказов", color_continuous_scale="Blues",
+)
+fig_products.update_traces(
+    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
+    textposition="inside", 
+    insidetextanchor="middle",
+    textfont=dict(color="black") # Черный текст на голубом фоне
+)
+fig_products.update_layout(
+    title=f"{product_top_limit} товаров по сумме продаж",
+    yaxis={"categoryorder": "total ascending", "tickfont": {"size": 10}},
+    xaxis={"tickfont": {"size": 10}}, showlegend=False, height=chart_height_products, 
+    coloraxis_showscale=False, margin=dict(l=10, r=20, t=50, b=10),
+)
+st.plotly_chart(fig_products, width='stretch')
+
+# Подборка (таблица) топ товаров
+with st.expander(f"📋 Подборка: {product_top_limit} товаров (детали)"):
+    st.markdown(render_html_table(top_products_df), unsafe_allow_html=True)
+
+
+# =========================================================
+# БЛОК 2: ПРОДАВЦЫ И ИХ ТОВАРЫ
+# =========================================================
+st.divider()
+st.subheader("🏆 Продавцы по сумме продаж")
+
+sellers_agg = (df.groupby("Продавец", as_index=False)["Сумма_заказов"].sum()
+               .sort_values("Сумма_заказов", ascending=False).reset_index(drop=True))
+sellers_agg["Рейтинг"] = sellers_agg.index + 1
+
+col_s, col_p = st.columns(2)
+
+with col_s:
+    st.caption("**Сколько продавцов показать:**")
+    seller_limit = st.radio("Продавцы", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="seller_limit")
+
+with col_p:
+    st.caption("**Сколько товаров внутри каждого продавца:**")
+    product_limit = st.radio("Товары внутри продавца", ["Топ-10", "Топ-30", "Топ-50", "Все"], index=3, horizontal=True, label_visibility="collapsed", key="product_limit")
+
+seller_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": len(sellers_agg)}
+product_limit_map = {"Топ-10": 10, "Топ-30": 30, "Топ-50": 50, "Все": None}
+
+n_sellers = seller_limit_map[seller_limit]
+n_products = product_limit_map[product_limit]
+shown_sellers = sellers_agg.head(n_sellers).reset_index(drop=True)
+
+# График по продавцам
+chart_height_sellers = max(500, len(shown_sellers) * 26)
+fig_sellers = px.bar(
+    shown_sellers, x="Сумма_заказов", y="Продавец", orientation="h", text="Сумма_заказов",
+    color="Сумма_заказов", color_continuous_scale="Purples",
+)
+fig_sellers.update_traces(
+    texttemplate="%{text:,.0f} ₽".replace(",", " "), 
+    textposition="inside", 
+    insidetextanchor="middle",
+    textfont=dict(color="white")
+)
+fig_sellers.update_layout(
+    title=f"{seller_limit} продавцов по сумме продаж",
+    yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
+    xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height_sellers, coloraxis_showscale=False,
+    margin=dict(l=10, r=20, t=50, b=10),
+)
+st.plotly_chart(fig_sellers, width='stretch')
+
 st.caption(f"Продавцы: **{seller_limit}** • Товары в каждом: **{product_limit}** • сортировка по сумме заказов ↓")
 
 for _, seller_row in shown_sellers.iterrows():
@@ -216,5 +257,4 @@ for _, seller_row in shown_sellers.iterrows():
     header = f"#{seller_row['Рейтинг']} **{seller}** — {seller_row['Сумма_заказов']:,.0f} ₽ • {total_items} тов.{suffix}".replace(",", " ")
     
     with st.expander(header):
-        html_table = render_html_table(items_shown)
-        st.markdown(html_table, unsafe_allow_html=True)
+        st.markdown(render_html_table(items_shown), unsafe_allow_html=True)
