@@ -168,7 +168,6 @@ n_top_products = pt_limit_map[product_top_limit]
 
 top_products_df = df.head(n_top_products).copy().reset_index(drop=True)
 
-# Уникальное название для оси Y (добавляем номер), чтобы график не склеивал товары
 top_products_df['Label'] = top_products_df.apply(
     lambda row: f"{row.name + 1}. {row['Товар'][:40]}..." if len(row['Товар']) > 40 else f"{row.name + 1}. {row['Товар']}", 
     axis=1
@@ -179,17 +178,17 @@ fig_products = px.bar(
     top_products_df, x="Сумма_заказов", y="Label", orientation="h", text="Сумма_заказов"
 )
 fig_products.update_traces(
-    marker_color='#4a90e2', # Единый синий цвет
+    marker_color='#4a90e2',
     texttemplate="%{text:,.0f} ₽".replace(",", " "), 
-    textposition="inside", 
-    insidetextanchor="middle",
-    textfont=dict(color="white")
+    textposition="auto", # <--- АВТОМАТИЧЕСКОЕ ПОЗИЦИОНИРОВАНИЕ
+    insidetextanchor="middle"
+    # Убрали принудительный белый цвет, чтобы текст снаружи был виден
 )
 fig_products.update_layout(
     title=f"{product_top_limit} товаров по сумме продаж",
     yaxis={"categoryorder": "total ascending", "tickfont": {"size": 10}},
     xaxis={"tickfont": {"size": 10}}, showlegend=False, height=chart_height_products, 
-    coloraxis_showscale=False, margin=dict(l=10, r=20, t=50, b=10),
+    coloraxis_showscale=False, margin=dict(l=10, r=100, t=50, b=10), # r=100, чтобы текст снаружи не обрезался
 )
 st.plotly_chart(fig_products, width='stretch')
 
@@ -231,15 +230,15 @@ fig_sellers = px.bar(
 )
 fig_sellers.update_traces(
     texttemplate="%{text:,.0f} ₽".replace(",", " "), 
-    textposition="inside", 
-    insidetextanchor="middle",
-    textfont=dict(color="white")
+    textposition="auto", # <--- АВТОМАТИЧЕСКОЕ ПОЗИЦИОНИРОВАНИЕ
+    insidetextanchor="middle"
+    # Убрали принудительный белый цвет
 )
 fig_sellers.update_layout(
     title=f"{seller_limit} продавцов по сумме продаж",
     yaxis={"categoryorder": "total ascending", "tickfont": {"size": 11 if len(shown_sellers) <= 30 else 9}},
     xaxis={"tickfont": {"size": 11}}, showlegend=False, height=chart_height_sellers, coloraxis_showscale=False,
-    margin=dict(l=10, r=20, t=50, b=10),
+    margin=dict(l=10, r=100, t=50, b=10), # r=100 для запаса места под внешний текст
 )
 st.plotly_chart(fig_sellers, width='stretch')
 
